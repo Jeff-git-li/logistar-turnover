@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import {
-  triggerSync,
-  uploadExcel,
+  triggerProductSync,
+  triggerInventoryLogSync,
+  triggerDailySync,
   getSyncLogs,
   type SyncLogEntry,
 } from "@/lib/api";
@@ -12,8 +13,14 @@ import {
 export default function SyncPage() {
   const [logs, setLogs] = useState<SyncLogEntry[]>([]);
   const [syncing, setSyncing] = useState<string | null>(null);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+
+  // Inventory log sync params
+  const [invlogStart, setInvlogStart] = useState("2024-01-01 00:00:00");
+  const [invlogEnd, setInvlogEnd] = useState("2026-02-25 00:00:00");
 
   const loadLogs = async () => {
     try {
@@ -25,39 +32,22 @@ export default function SyncPage() {
 
   useEffect(() => {
     loadLogs();
+    const interval = setInterval(loadLogs, 10000);
+    return () => clearInterval(interval);
   }, []);
 
-  const handleSync = async (type: "outbound" | "inbound" | "products") => {
-    setSyncing(type);
+  const handleInvlogSync = async () => {
+    setSyncing("invlog");
     setMessage(null);
     try {
-      const result = await triggerSync(type);
-      if (result.status === "started") {
-        setMessage({
-          type: "success",
-          text: result.message || `${type} sync started in background. Logs will refresh automatically.`,
-        });
-        // Auto-refresh logs every 5 seconds while sync is running
-        const interval = setInterval(async () => {
-          const logs = await getSyncLogs(30);
-          setLogs(logs);
-          const latest = logs.find((l: any) => l.sync_type === (type === "products" ? "product" : type));
-          if (latest && latest.status !== "running") {
-            clearInterval(interval);
-            setMessage({
-              type: latest.status === "success" ? "success" : "error",
-              text: latest.status === "success"
-                ? `Synced ${latest.records_synced} ${type} records`
-                : `Sync failed: ${latest.error_message || "Unknown error"}`,
-            });
-          }
-        }, 5000);
-      } else {
-        setMessage({
-          type: "success",
-          text: `Synced ${result.records_synced} ${type} records`,
-        });
-      }
+      const result = await triggerInventoryLogSync({
+        startTime: invlogStart,
+        endTime: invlogEnd,
+      });
+      setMessage({
+        type: "success",
+        text: result.message || "Inventory log sync started. Check logs below.",
+      });
       loadLogs();
     } catch (e: any) {
       setMessage({ type: "error", text: e.message });
@@ -66,19 +56,33 @@ export default function SyncPage() {
     }
   };
 
-  const handleUpload = async () => {
-    const file = fileRef.current?.files?.[0];
-    if (!file) return;
-    setSyncing("excel");
+  const handleDailySync = async () => {
+    setSyncing("daily");
     setMessage(null);
     try {
-      const result = await uploadExcel(file);
+      const result = await triggerDailySync();
       setMessage({
         type: "success",
-        text: `Imported ${result.records_imported} records from ${result.filename}`,
+        text: result.message || "Daily sync started in background.",
       });
       loadLogs();
-      if (fileRef.current) fileRef.current.value = "";
+    } catch (e: any) {
+      setMessage({ type: "error", text: e.message });
+    } finally {
+      setSyncing(null);
+    }
+  };
+
+  const handleProductSync = async () => {
+    setSyncing("products");
+    setMessage(null);
+    try {
+      const result = await triggerProductSync();
+      setMessage({
+        type: "success",
+        text: result.message || "Product sync started in background.",
+      });
+      loadLogs();
     } catch (e: any) {
       setMessage({ type: "error", text: e.message });
     } finally {
@@ -93,7 +97,7 @@ export default function SyncPage() {
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-slate-900">Data Sync</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Pull data from WMS APIs or import exported Excel files
+            Pull data from WMS APIs into the local database
           </p>
         </div>
 
@@ -109,68 +113,77 @@ export default function SyncPage() {
           </div>
         )}
 
-        {/* Sync Buttons */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <div className="stat-card">
-            <h3 className="font-semibold text-slate-900 mb-2">📤 Outbound Orders</h3>
-            <p className="text-sm text-slate-500 mb-4">
-              Sync dropshipping orders via getOrderList API
-            </p>
-            <button
-              onClick={() => handleSync("outbound")}
-              disabled={syncing !== null}
-              className="w-full bg-brand-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-brand-700 disabled:opacity-50 transition-colors"
-            >
-              {syncing === "outbound" ? "Syncing..." : "Sync Outbound"}
-            </button>
-          </div>
+        {/* ─── Sync Controls ─── */}
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold text-slate-900 mb-4">
+            Sync Controls
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="stat-card">
+              <h3 className="font-semibold text-slate-900 mb-2">
+                📋 Inventory Logs
+              </h3>
+              <p className="text-sm text-slate-500 mb-3">
+                Fetches all inbound/outbound movements via inventoryLog API.
+                Max 6-month range per request.
+              </p>
+              <div className="space-y-2 mb-3">
+                <input
+                  type="text"
+                  placeholder="Start (e.g. 2025-08-24 00:00:00)"
+                  value={invlogStart}
+                  onChange={(e) => setInvlogStart(e.target.value)}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                <input
+                  type="text"
+                  placeholder="End (e.g. 2025-09-24 00:00:00)"
+                  value={invlogEnd}
+                  onChange={(e) => setInvlogEnd(e.target.value)}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+              <button
+                onClick={handleInvlogSync}
+                disabled={syncing !== null}
+                className="w-full bg-brand-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-brand-700 disabled:opacity-50 transition-colors"
+              >
+                {syncing === "invlog" ? "Syncing..." : "Sync Inventory Logs"}
+              </button>
+            </div>
 
-          <div className="stat-card">
-            <h3 className="font-semibold text-slate-900 mb-2">📥 Inbound Receivings</h3>
-            <p className="text-sm text-slate-500 mb-4">
-              Sync receivings via getReceivingListForYB API
-            </p>
-            <button
-              onClick={() => handleSync("inbound")}
-              disabled={syncing !== null}
-              className="w-full bg-brand-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-brand-700 disabled:opacity-50 transition-colors"
-            >
-              {syncing === "inbound" ? "Syncing..." : "Sync Inbound"}
-            </button>
-          </div>
+            <div className="stat-card">
+              <h3 className="font-semibold text-slate-900 mb-2">
+                🔄 Daily Sync
+              </h3>
+              <p className="text-sm text-slate-500 mb-3">
+                Fetches last 7 days of inventory logs + full product catalog.
+                Runs automatically every day at 2:00 AM.
+              </p>
+              <button
+                onClick={handleDailySync}
+                disabled={syncing !== null}
+                className="w-full bg-green-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors"
+              >
+                {syncing === "daily" ? "Running..." : "Run Daily Sync Now"}
+              </button>
+            </div>
 
-          <div className="stat-card">
-            <h3 className="font-semibold text-slate-900 mb-2">🏷️ Product Catalog</h3>
-            <p className="text-sm text-slate-500 mb-4">
-              Sync products via getProductList API
-            </p>
-            <button
-              onClick={() => handleSync("products")}
-              disabled={syncing !== null}
-              className="w-full bg-brand-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-brand-700 disabled:opacity-50 transition-colors"
-            >
-              {syncing === "products" ? "Syncing..." : "Sync Products"}
-            </button>
-          </div>
-
-          <div className="stat-card">
-            <h3 className="font-semibold text-slate-900 mb-2">📑 Excel Import</h3>
-            <p className="text-sm text-slate-500 mb-4">
-              Upload exported WMS Excel files (.xlsx)
-            </p>
-            <input
-              type="file"
-              ref={fileRef}
-              accept=".xlsx,.xls"
-              className="w-full text-sm mb-2 file:mr-2 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-sm file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200"
-            />
-            <button
-              onClick={handleUpload}
-              disabled={syncing !== null}
-              className="w-full bg-green-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors"
-            >
-              {syncing === "excel" ? "Importing..." : "Import Excel"}
-            </button>
+            <div className="stat-card">
+              <h3 className="font-semibold text-slate-900 mb-2">
+                🏷️ Product Catalog
+              </h3>
+              <p className="text-sm text-slate-500 mb-3">
+                Sync product master data via getProductList API.
+              </p>
+              <button
+                onClick={handleProductSync}
+                disabled={syncing !== null}
+                className="w-full bg-slate-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-slate-700 disabled:opacity-50 transition-colors"
+              >
+                {syncing === "products" ? "Syncing..." : "Sync Products"}
+              </button>
+            </div>
           </div>
         </div>
 

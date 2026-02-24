@@ -1,26 +1,20 @@
 """
-Sync API Router — trigger data syncs from WMS API and Excel imports.
+Sync API Router — trigger data syncs from WMS API.
 Sync operations run as background tasks so the endpoint returns immediately.
 """
 import asyncio
-import os
-import shutil
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, UploadFile, File, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 
 from database import get_db, async_session_factory
 from models import SyncLog
 from services.sync_service import sync_service
-from services.excel_parser import excel_parser
 
 router = APIRouter(prefix="/api/sync", tags=["sync"])
-
-UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 async def _run_sync_in_background(coro_factory):
@@ -30,50 +24,6 @@ async def _run_sync_in_background(coro_factory):
             await coro_factory(db)
         except Exception:
             pass  # errors are already logged/recorded in SyncLog by the service
-
-
-@router.post("/outbound")
-async def sync_outbound(
-    background_tasks: BackgroundTasks,
-    create_time_from: Optional[str] = Query(None),
-    create_time_to: Optional[str] = Query(None),
-    ship_time_from: Optional[str] = Query(None),
-    ship_time_to: Optional[str] = Query(None),
-):
-    """Trigger outbound order sync from WMS API (runs in background)."""
-    background_tasks.add_task(
-        _run_sync_in_background,
-        lambda db: sync_service.sync_outbound_orders(
-            db,
-            create_time_from=create_time_from,
-            create_time_to=create_time_to,
-            ship_time_from=ship_time_from,
-            ship_time_to=ship_time_to,
-        ),
-    )
-    return {"status": "started", "message": "Outbound sync started in background. Check /api/sync/logs for progress."}
-
-
-@router.post("/inbound")
-async def sync_inbound(
-    background_tasks: BackgroundTasks,
-    create_time_from: Optional[str] = Query(None),
-    create_time_to: Optional[str] = Query(None),
-    date_shelves_from: Optional[str] = Query(None),
-    date_shelves_to: Optional[str] = Query(None),
-):
-    """Trigger inbound receiving sync from WMS API (runs in background)."""
-    background_tasks.add_task(
-        _run_sync_in_background,
-        lambda db: sync_service.sync_inbound_receivings(
-            db,
-            create_time_from=create_time_from,
-            create_time_to=create_time_to,
-            date_shelves_from=date_shelves_from,
-            date_shelves_to=date_shelves_to,
-        ),
-    )
-    return {"status": "started", "message": "Inbound sync started in background. Check /api/sync/logs for progress."}
 
 
 @router.post("/products")
@@ -86,31 +36,52 @@ async def sync_products(background_tasks: BackgroundTasks):
     return {"status": "started", "message": "Product sync started in background. Check /api/sync/logs for progress."}
 
 
-@router.post("/excel-upload")
-async def upload_excel(
-    file: UploadFile = File(...),
-    replace_existing: bool = Query(False),
-    db: AsyncSession = Depends(get_db),
+@router.post("/inventory-logs")
+async def sync_inventory_logs(
+    background_tasks: BackgroundTasks,
+    start_time: str = Query(
+        ...,
+        description="Start time in China time (UTC+8), format: YYYY-MM-DD HH:MM:SS",
+    ),
+    end_time: str = Query(
+        ...,
+        description="End time in China time (UTC+8), format: YYYY-MM-DD HH:MM:SS",
+    ),
+    warehouse_id: Optional[int] = Query(None, description="Warehouse ID (13=Ontario CA, 5=New York)"),
+    customer_code: Optional[str] = Query(None),
 ):
-    """Upload and import an exported WMS Excel file."""
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(400, "Only .xlsx or .xls files are supported")
+    """
+    Trigger inventory log sync from WMS inventoryLog API (runs in background).
+    Date range auto-chunked into ≤6-month segments.
+    Times must be in China Standard Time (UTC+8).
+    """
+    start_dt = datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S")
+    end_dt = datetime.strptime(end_time, "%Y-%m-%d %H:%M:%S")
 
-    # Save uploaded file
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"{timestamp}_{file.filename}"
-    filepath = os.path.join(UPLOAD_DIR, filename)
-
-    with open(filepath, "wb") as f:
-        shutil.copyfileobj(file.file, f)
-
-    # Parse and import
-    count = await excel_parser.import_to_db(db, filepath, replace_existing=replace_existing)
+    background_tasks.add_task(
+        _run_sync_in_background,
+        lambda db: sync_service.sync_inventory_logs(
+            db,
+            start_time=start_dt,
+            end_time=end_dt,
+            warehouse_id=warehouse_id,
+            customer_code=customer_code,
+        ),
+    )
     return {
-        "status": "success",
-        "filename": filename,
-        "records_imported": count,
+        "status": "started",
+        "message": f"Inventory log sync started for {start_time} → {end_time}. Check /api/sync/logs for progress.",
     }
+
+
+@router.post("/daily")
+async def trigger_daily_sync(background_tasks: BackgroundTasks):
+    """Trigger a daily incremental sync (last 7 days of inventory logs + products)."""
+    background_tasks.add_task(
+        _run_sync_in_background,
+        lambda db: sync_service.daily_sync(db),
+    )
+    return {"status": "started", "message": "Daily sync started in background."}
 
 
 @router.get("/logs")

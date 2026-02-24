@@ -3,30 +3,31 @@
 import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { StatCard } from "@/components/StatCard";
-import { VolumeChart } from "@/components/VolumeChart";
-import { TurnoverGauge } from "@/components/TurnoverGauge";
-import { CBMPieChart } from "@/components/CBMPieChart";
+import { InvlogVolumeChart } from "@/components/InvlogVolumeChart";
+import { InvlogTurnoverGauge } from "@/components/InvlogTurnoverGauge";
 import { DateRangePicker } from "@/components/DateRangePicker";
+import { WarehouseSelect } from "@/components/WarehouseSelect";
 import {
-  getDashboardSummary,
-  getInboundOutbound,
-  getTurnover,
-  getCustomerBreakdown,
-  type DashboardSummary,
-  type InboundOutboundData,
-  type TurnoverData,
-  type CustomerData,
+  getInvlogDashboard,
+  getInvlogVolume,
+  getInvlogTurnover,
+  getInvlogCustomers,
+  type InvlogDashboardSummary,
+  type InvlogVolumeData,
+  type InvlogTurnoverData,
+  type InvlogCustomerData,
 } from "@/lib/api";
 
 export default function DashboardPage() {
-  const [dateFrom, setDateFrom] = useState("2024-01-01");
-  const [dateTo, setDateTo] = useState("2026-02-23");
-  const [granularity, setGranularity] = useState("month");
+  const [dateFrom, setDateFrom] = useState("2025-08-24");
+  const [dateTo, setDateTo] = useState("2025-09-24");
+  const [granularity, setGranularity] = useState("day");
+  const [warehouseId, setWarehouseId] = useState("");
 
-  const [summary, setSummary] = useState<DashboardSummary | null>(null);
-  const [volume, setVolume] = useState<InboundOutboundData | null>(null);
-  const [turnover, setTurnover] = useState<TurnoverData | null>(null);
-  const [customers, setCustomers] = useState<CustomerData[]>([]);
+  const [summary, setSummary] = useState<InvlogDashboardSummary | null>(null);
+  const [volume, setVolume] = useState<InvlogVolumeData | null>(null);
+  const [turnover, setTurnover] = useState<InvlogTurnoverData | null>(null);
+  const [customers, setCustomers] = useState<InvlogCustomerData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,11 +36,12 @@ export default function DashboardPage() {
       setLoading(true);
       setError(null);
       try {
+        const wid = warehouseId || undefined;
         const [s, v, t, c] = await Promise.all([
-          getDashboardSummary(dateFrom, dateTo),
-          getInboundOutbound({ dateFrom, dateTo, granularity }),
-          getTurnover({ dateFrom, dateTo }),
-          getCustomerBreakdown({ dateFrom, dateTo }),
+          getInvlogDashboard({ dateFrom, dateTo, warehouseId: wid }),
+          getInvlogVolume({ dateFrom, dateTo, granularity, warehouseId: wid }),
+          getInvlogTurnover({ dateFrom, dateTo, warehouseId: wid }),
+          getInvlogCustomers({ dateFrom, dateTo, warehouseId: wid }),
         ]);
         setSummary(s);
         setVolume(v);
@@ -52,7 +54,7 @@ export default function DashboardPage() {
       }
     }
     load();
-  }, [dateFrom, dateTo, granularity]);
+  }, [dateFrom, dateTo, granularity, warehouseId]);
 
   return (
     <div className="flex">
@@ -63,19 +65,22 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
             <p className="text-sm text-slate-500 mt-1">
-              Warehouse turnover overview & key metrics
+              Warehouse turnover overview & key metrics (from inventory logs)
             </p>
           </div>
-          <DateRangePicker
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            onChange={(f, t) => {
-              setDateFrom(f);
-              setDateTo(t);
-            }}
-            granularity={granularity}
-            onGranularityChange={setGranularity}
-          />
+          <div className="flex items-center gap-3">
+            <WarehouseSelect value={warehouseId} onChange={setWarehouseId} />
+            <DateRangePicker
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onChange={(f, t) => {
+                setDateFrom(f);
+                setDateTo(t);
+              }}
+              granularity={granularity}
+              onGranularityChange={setGranularity}
+            />
+          </div>
         </div>
 
         {error && (
@@ -94,47 +99,44 @@ export default function DashboardPage() {
             {summary && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
                 <StatCard
-                  title="Outbound Orders"
-                  value={summary.outbound.total_orders.toLocaleString()}
-                  subtitle={`${summary.outbound.total_parcels.toLocaleString()} parcels`}
+                  title="Outbound Events"
+                  value={summary.outbound.total_events.toLocaleString()}
+                  subtitle={`${summary.outbound.total_qty.toLocaleString()} units`}
                   icon={<span className="text-2xl">📤</span>}
                 />
                 <StatCard
-                  title="Inbound Receivings"
-                  value={summary.inbound.total_receivings.toLocaleString()}
-                  subtitle={`${summary.inbound.total_received_qty.toLocaleString()} units`}
+                  title="Inbound Events"
+                  value={summary.inbound.total_events.toLocaleString()}
+                  subtitle={`${summary.inbound.total_qty.toLocaleString()} units`}
                   icon={<span className="text-2xl">📥</span>}
                 />
                 <StatCard
-                  title="Outbound CBM"
-                  value={summary.outbound.total_cbm.toFixed(2)}
-                  subtitle={`${summary.outbound.total_weight_kg.toFixed(0)} kg`}
-                  icon={<span className="text-2xl">📐</span>}
+                  title="Active SKUs"
+                  value={summary.active_skus.toLocaleString()}
+                  subtitle={`of ${summary.total_products.toLocaleString()} total`}
+                  icon={<span className="text-2xl">🏷️</span>}
                 />
                 <StatCard
                   title="Customers"
                   value={summary.unique_customers}
-                  subtitle={`${summary.countries_served} countries`}
                   icon={<span className="text-2xl">👥</span>}
                 />
                 <StatCard
-                  title="Products"
-                  value={summary.total_products.toLocaleString()}
-                  icon={<span className="text-2xl">🏷️</span>}
+                  title="Warehouses"
+                  value={summary.active_warehouses}
+                  icon={<span className="text-2xl">🏭</span>}
                 />
               </div>
             )}
 
             {/* Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-              {/* Inbound vs Outbound Volume */}
+              {/* Volume Chart */}
               <div className="chart-container">
                 <h3 className="text-lg font-semibold text-slate-900 mb-4">
                   Inbound vs Outbound Volume
                 </h3>
-                {volume && (
-                  <VolumeChart outbound={volume.outbound} inbound={volume.inbound} />
-                )}
+                {volume && <InvlogVolumeChart data={volume} />}
               </div>
 
               {/* Turnover Rate */}
@@ -142,16 +144,45 @@ export default function DashboardPage() {
                 <h3 className="text-lg font-semibold text-slate-900 mb-4">
                   Inventory Turnover Rate
                 </h3>
-                {turnover && <TurnoverGauge data={turnover} />}
+                {turnover && <InvlogTurnoverGauge data={turnover} />}
               </div>
             </div>
 
-            {/* CBM Pie Chart */}
+            {/* Top Customers Table */}
             <div className="chart-container">
               <h3 className="text-lg font-semibold text-slate-900 mb-4">
-                Outbound CBM by Customer
+                Top Customers by Outbound ({customers.length})
               </h3>
-              <CBMPieChart data={customers} />
+              <div className="overflow-x-auto max-h-80 overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-white">
+                    <tr className="border-b text-left">
+                      <th className="pb-2 font-semibold text-slate-600">Customer</th>
+                      <th className="pb-2 font-semibold text-slate-600 text-right">Out Events</th>
+                      <th className="pb-2 font-semibold text-slate-600 text-right">Out Qty</th>
+                      <th className="pb-2 font-semibold text-slate-600 text-right">In Events</th>
+                      <th className="pb-2 font-semibold text-slate-600 text-right">In Qty</th>
+                      <th className="pb-2 font-semibold text-slate-600 text-right">SKUs</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {customers.slice(0, 15).map((c) => (
+                      <tr key={c.customer_code} className="border-b border-slate-50 hover:bg-slate-50">
+                        <td className="py-2">
+                          <span className="inline-block bg-brand-100 text-brand-700 px-2 py-0.5 rounded text-xs font-medium">
+                            {c.customer_code}
+                          </span>
+                        </td>
+                        <td className="py-2 text-right">{c.outbound_events.toLocaleString()}</td>
+                        <td className="py-2 text-right">{c.outbound_qty.toLocaleString()}</td>
+                        <td className="py-2 text-right">{c.inbound_events.toLocaleString()}</td>
+                        <td className="py-2 text-right">{c.inbound_qty.toLocaleString()}</td>
+                        <td className="py-2 text-right">{c.outbound_skus}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </>
         )}

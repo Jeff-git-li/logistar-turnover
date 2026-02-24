@@ -8,7 +8,8 @@ const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: "📊" },
   { href: "/volume", label: "In/Out Volume", icon: "📦" },
   { href: "/customers", label: "Customers", icon: "👥" },
-  { href: "/products", label: "Products", icon: "🏷️" },
+  { href: "/products", label: "SKU Analysis", icon: "🏷️" },
+  { href: "/warehouses", label: "Warehouses", icon: "🏭" },
   { href: "/sync", label: "Data Sync", icon: "🔄" },
 ];
 
@@ -48,7 +49,7 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="p-4 border-t border-slate-200">
-        <p className="text-xs text-slate-400">Warehouse: DEW</p>
+        <p className="text-xs text-slate-400">Ontario, CA &middot; New York, NY</p>
       </div>
     </aside>
   );

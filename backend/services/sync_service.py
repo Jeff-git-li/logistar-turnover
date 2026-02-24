@@ -2,15 +2,20 @@
 Data Sync Service — syncs WMS API data into local SQLite database.
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func as sa_func
 from sqlalchemy.dialects.sqlite import insert as sqlite_upsert
 
-from models import OutboundOrder, InboundReceiving, Product, SyncLog
+from models import Product, InventoryLog, SyncLog
 from services.wms_client import wms_client
+from config import settings
 
 logger = logging.getLogger(__name__)
+
+# Operation types for direction classification
+INBOUND_OPS = set(settings.INBOUND_OPERATION_TYPES)
+OUTBOUND_OPS = set(settings.OUTBOUND_OPERATION_TYPES)
 
 
 def _parse_dt(val: str) -> datetime | None:
@@ -47,162 +52,6 @@ def _calc_volume_cbm(length_cm, width_cm, height_cm) -> float | None:
 
 class SyncService:
     """Handles syncing data from WMS APIs into the local database."""
-
-    async def sync_outbound_orders(
-        self,
-        db: AsyncSession,
-        create_time_from: str | None = None,
-        create_time_to: str | None = None,
-        ship_time_from: str | None = None,
-        ship_time_to: str | None = None,
-    ) -> int:
-        """Sync outbound orders from WMS API."""
-        log = SyncLog(sync_type="outbound", status="running")
-        db.add(log)
-        await db.commit()
-
-        try:
-            raw_orders = await wms_client.get_all_orders(
-                create_time_from=create_time_from,
-                create_time_to=create_time_to,
-                ship_time_from=ship_time_from,
-                ship_time_to=ship_time_to,
-            )
-
-            count = 0
-            for raw in raw_orders:
-                existing = await db.execute(
-                    select(OutboundOrder).where(OutboundOrder.order_id == raw["order_id"])
-                )
-                order = existing.scalar_one_or_none()
-
-                volume_cbm = _calc_volume_cbm(
-                    raw.get("order_measure_length"),
-                    raw.get("order_measure_width"),
-                    raw.get("order_measure_height"),
-                )
-
-                values = dict(
-                    order_id=raw["order_id"],
-                    order_code=raw.get("order_code"),
-                    reference_no=raw.get("reference_no"),
-                    customer_code=raw.get("customer_code"),
-                    order_status=raw.get("order_status"),
-                    parcel_quantity=_safe_int(raw.get("parcel_quantity")),
-                    country_code=raw.get("country_code"),
-                    mp_code=raw.get("mp_code"),
-                    add_time=_parse_dt(raw.get("add_time", "")),
-                    ship_time=_parse_dt(raw.get("ship_time", "")),
-                    service_number=raw.get("service_number"),
-                    tracking_number=raw.get("tracking_number"),
-                    so_weight=_safe_float(raw.get("so_weight")),
-                    so_actual_weight=_safe_float(raw.get("so_actual_weight")),
-                    so_vol_weight=_safe_float(raw.get("so_vol_weight")),
-                    order_measure_length=_safe_float(raw.get("order_measure_length")),
-                    order_measure_width=_safe_float(raw.get("order_measure_width")),
-                    order_measure_height=_safe_float(raw.get("order_measure_height")),
-                    warehouse_code=raw.get("warehouse_code"),
-                    picking_code=raw.get("picking_code"),
-                    order_measure=raw.get("order_measure"),
-                    volume_cbm=volume_cbm,
-                    synced_at=datetime.now(),
-                )
-
-                if order:
-                    for k, v in values.items():
-                        setattr(order, k, v)
-                else:
-                    db.add(OutboundOrder(**values))
-                count += 1
-
-            await db.commit()
-
-            log.status = "success"
-            log.records_synced = count
-            log.finished_at = datetime.now()
-            await db.commit()
-            logger.info(f"Synced {count} outbound orders")
-            return count
-
-        except Exception as e:
-            log.status = "failed"
-            log.error_message = str(e)
-            log.finished_at = datetime.now()
-            await db.commit()
-            logger.error(f"Outbound sync failed: {e}")
-            raise
-
-    async def sync_inbound_receivings(
-        self,
-        db: AsyncSession,
-        create_time_from: str | None = None,
-        create_time_to: str | None = None,
-        date_shelves_from: str | None = None,
-        date_shelves_to: str | None = None,
-    ) -> int:
-        """Sync inbound receivings from WMS API."""
-        log = SyncLog(sync_type="inbound", status="running")
-        db.add(log)
-        await db.commit()
-
-        try:
-            raw_receivings = await wms_client.get_all_receivings(
-                create_time_from=create_time_from,
-                create_time_to=create_time_to,
-                date_shelves_from=date_shelves_from,
-                date_shelves_to=date_shelves_to,
-            )
-
-            count = 0
-            for raw in raw_receivings:
-                existing = await db.execute(
-                    select(InboundReceiving).where(
-                        InboundReceiving.receiving_id == raw["receiving_id"]
-                    )
-                )
-                recv = existing.scalar_one_or_none()
-
-                values = dict(
-                    receiving_id=raw["receiving_id"],
-                    receiving_code=raw.get("receiving_code"),
-                    warehouse_code=raw.get("warehouse_code"),
-                    customer_code=raw.get("customer_code"),
-                    receiving_type=raw.get("receiving_type"),
-                    expected_date=raw.get("expected_date"),
-                    receiving_status=_safe_int(raw.get("receiving_status")),
-                    total_packages=_safe_int(raw.get("total_packages")),
-                    receiving_add_time=_parse_dt(raw.get("receiving_add_time", "")),
-                    pd_putaway_time=_parse_dt(raw.get("pd_putaway_time", "")),
-                    sku_species=_safe_int(raw.get("sku_species")),
-                    expect_qty=_safe_int(raw.get("expect_qty")),
-                    received_qty=_safe_int(raw.get("received_qty")),
-                    shelves_qty=_safe_int(raw.get("shelves_qty")),
-                    synced_at=datetime.now(),
-                )
-
-                if recv:
-                    for k, v in values.items():
-                        setattr(recv, k, v)
-                else:
-                    db.add(InboundReceiving(**values))
-                count += 1
-
-            await db.commit()
-
-            log.status = "success"
-            log.records_synced = count
-            log.finished_at = datetime.now()
-            await db.commit()
-            logger.info(f"Synced {count} inbound receivings")
-            return count
-
-        except Exception as e:
-            log.status = "failed"
-            log.error_message = str(e)
-            log.finished_at = datetime.now()
-            await db.commit()
-            logger.error(f"Inbound sync failed: {e}")
-            raise
 
     async def sync_products(self, db: AsyncSession) -> int:
         """Sync product master data from WMS API."""
@@ -262,6 +111,120 @@ class SyncService:
             await db.commit()
             logger.error(f"Product sync failed: {e}")
             raise
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Inventory Log Sync (primary data source)
+    # ─────────────────────────────────────────────────────────────────────
+    def _classify_direction(self, operation_type: str) -> str:
+        """Classify an operation_type into inbound/outbound/other."""
+        if operation_type in INBOUND_OPS:
+            return "inbound"
+        if operation_type in OUTBOUND_OPS:
+            return "outbound"
+        return "other"
+
+    async def sync_inventory_logs(
+        self,
+        db: AsyncSession,
+        start_time: datetime,
+        end_time: datetime,
+        warehouse_id: int | None = None,
+        customer_code: str | None = None,
+    ) -> int:
+        """
+        Sync inventory logs from WMS inventoryLog API.
+        start_time/end_time are in China Standard Time (UTC+8) as the API expects.
+        """
+        log = SyncLog(sync_type="inventory_log", status="running")
+        db.add(log)
+        await db.commit()
+
+        try:
+            raw_logs = await wms_client.get_inventory_logs_chunked(
+                start_time=start_time,
+                end_time=end_time,
+                warehouse_id=warehouse_id,
+                customer_code=customer_code,
+            )
+            logger.info(f"Fetched {len(raw_logs)} inventory logs, upserting to DB...")
+
+            count = 0
+            BATCH = 1000
+            for i in range(0, len(raw_logs), BATCH):
+                batch = raw_logs[i:i + BATCH]
+                for raw in batch:
+                    op_type = raw.get("operation_type", "")
+                    direction = self._classify_direction(op_type)
+
+                    values = dict(
+                        ref_no=raw.get("ref_no", ""),
+                        reference_no=raw.get("reference_no"),
+                        product_barcode=raw.get("product_barcode", ""),
+                        warehouse_id=str(raw.get("warehouse_id", "")),
+                        quantity=_safe_int(raw.get("quantity")),
+                        receiving_code=raw.get("receiving_code"),
+                        ibl_add_time=_parse_dt(raw.get("ibl_add_time", "")),
+                        ibl_note=raw.get("ibl_note"),
+                        customer_code=raw.get("customer_code"),
+                        tracking_number=raw.get("tracking_number"),
+                        warehouse_operation_time=_parse_dt(raw.get("warehouse_operation_time", "")),
+                        operation_type=op_type,
+                        inventory_type=_safe_int(raw.get("inventory_type")),
+                        inventory_type_name=raw.get("inventory_type_name"),
+                        inventory_status=_safe_int(raw.get("inventory_status")),
+                        user_name=raw.get("user_name"),
+                        direction=direction,
+                        synced_at=datetime.now(),
+                    )
+
+                    stmt = sqlite_upsert(InventoryLog).values(**values)
+                    stmt = stmt.on_conflict_do_update(
+                        index_elements=[
+                            InventoryLog.ref_no,
+                            InventoryLog.product_barcode,
+                            InventoryLog.ibl_add_time,
+                        ],
+                        set_={k: v for k, v in values.items()
+                              if k not in ("ref_no", "product_barcode", "ibl_add_time")},
+                    )
+                    await db.execute(stmt)
+                    count += 1
+
+                await db.commit()
+                logger.info(f"InventoryLog: upserted {count}/{len(raw_logs)}")
+
+            log.status = "success"
+            log.records_synced = count
+            log.finished_at = datetime.now()
+            await db.commit()
+            logger.info(f"Synced {count} inventory logs")
+            return count
+
+        except Exception as e:
+            log.status = "failed"
+            log.error_message = str(e)
+            log.finished_at = datetime.now()
+            await db.commit()
+            logger.error(f"InventoryLog sync failed: {e}")
+            raise
+
+    async def daily_sync(self, db: AsyncSession) -> dict:
+        """
+        Daily incremental sync: fetch last 7 days of inventory logs
+        (with overlap to catch late-arriving records).
+        Also in China Standard Time for the API.
+        """
+        now_cst = datetime.utcnow() + timedelta(hours=8)  # approximate CST
+        start = now_cst - timedelta(days=7)
+        end = now_cst
+
+        log_count = await self.sync_inventory_logs(db, start_time=start, end_time=end)
+        prod_count = await self.sync_products(db)
+
+        return {
+            "inventory_logs": log_count,
+            "products": prod_count,
+        }
 
 
 sync_service = SyncService()

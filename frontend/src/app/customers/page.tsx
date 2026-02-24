@@ -2,22 +2,29 @@
 
 import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
-import { CustomerChart } from "@/components/CustomerChart";
-import { CBMPieChart } from "@/components/CBMPieChart";
+import { InvlogCustomerChart } from "@/components/InvlogCustomerChart";
 import { DateRangePicker } from "@/components/DateRangePicker";
-import { getCustomerBreakdown, type CustomerData } from "@/lib/api";
+import { WarehouseSelect } from "@/components/WarehouseSelect";
+import { getInvlogCustomers, type InvlogCustomerData } from "@/lib/api";
 
 export default function CustomersPage() {
-  const [dateFrom, setDateFrom] = useState("2024-01-01");
-  const [dateTo, setDateTo] = useState("2026-02-23");
-  const [data, setData] = useState<CustomerData[]>([]);
+  const [dateFrom, setDateFrom] = useState("2025-08-24");
+  const [dateTo, setDateTo] = useState("2025-09-24");
+  const [warehouseId, setWarehouseId] = useState("");
+  const [data, setData] = useState<InvlogCustomerData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
       try {
-        setData(await getCustomerBreakdown({ dateFrom, dateTo }));
+        setData(
+          await getInvlogCustomers({
+            dateFrom,
+            dateTo,
+            warehouseId: warehouseId || undefined,
+          })
+        );
       } catch (e) {
         console.error(e);
       } finally {
@@ -25,9 +32,9 @@ export default function CustomersPage() {
       }
     }
     load();
-  }, [dateFrom, dateTo]);
+  }, [dateFrom, dateTo, warehouseId]);
 
-  const totalOutbound = data.reduce((s, d) => s + d.outbound_parcels, 0);
+  const totalOutbound = data.reduce((s, d) => s + d.outbound_qty, 0);
   const totalInbound = data.reduce((s, d) => s + d.inbound_qty, 0);
 
   return (
@@ -41,14 +48,17 @@ export default function CustomersPage() {
               Per-customer inbound & outbound analysis
             </p>
           </div>
-          <DateRangePicker
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            onChange={(f, t) => {
-              setDateFrom(f);
-              setDateTo(t);
-            }}
-          />
+          <div className="flex items-center gap-3">
+            <WarehouseSelect value={warehouseId} onChange={setWarehouseId} />
+            <DateRangePicker
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onChange={(f, t) => {
+                setDateFrom(f);
+                setDateTo(t);
+              }}
+            />
+          </div>
         </div>
 
         {loading ? (
@@ -57,20 +67,12 @@ export default function CustomersPage() {
           </div>
         ) : (
           <>
-            {/* Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-              <div className="chart-container">
-                <h3 className="text-lg font-semibold text-slate-900 mb-4">
-                  Customer Volumes
-                </h3>
-                <CustomerChart data={data} />
-              </div>
-              <div className="chart-container">
-                <h3 className="text-lg font-semibold text-slate-900 mb-4">
-                  Outbound CBM Share
-                </h3>
-                <CBMPieChart data={data} />
-              </div>
+            {/* Chart */}
+            <div className="chart-container mb-8">
+              <h3 className="text-lg font-semibold text-slate-900 mb-4">
+                Customer Volumes (Top 15)
+              </h3>
+              <InvlogCustomerChart data={data} />
             </div>
 
             {/* Table */}
@@ -83,13 +85,13 @@ export default function CustomersPage() {
                   <thead>
                     <tr className="border-b border-slate-200 text-left">
                       <th className="pb-3 font-semibold text-slate-600">Customer</th>
-                      <th className="pb-3 font-semibold text-slate-600 text-right">Outbound Orders</th>
-                      <th className="pb-3 font-semibold text-slate-600 text-right">Outbound Parcels</th>
-                      <th className="pb-3 font-semibold text-slate-600 text-right">Outbound CBM</th>
-                      <th className="pb-3 font-semibold text-slate-600 text-right">Outbound Weight (kg)</th>
-                      <th className="pb-3 font-semibold text-slate-600 text-right">Inbound Receivings</th>
-                      <th className="pb-3 font-semibold text-slate-600 text-right">Inbound Qty</th>
-                      <th className="pb-3 font-semibold text-slate-600 text-right">% of Total Out</th>
+                      <th className="pb-3 font-semibold text-slate-600 text-right">Out Events</th>
+                      <th className="pb-3 font-semibold text-slate-600 text-right">Out Qty</th>
+                      <th className="pb-3 font-semibold text-slate-600 text-right">Out SKUs</th>
+                      <th className="pb-3 font-semibold text-slate-600 text-right">In Events</th>
+                      <th className="pb-3 font-semibold text-slate-600 text-right">In Qty</th>
+                      <th className="pb-3 font-semibold text-slate-600 text-right">In SKUs</th>
+                      <th className="pb-3 font-semibold text-slate-600 text-right">% of Out</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -100,15 +102,15 @@ export default function CustomersPage() {
                             {d.customer_code}
                           </span>
                         </td>
-                        <td className="py-2.5 text-right">{d.outbound_orders.toLocaleString()}</td>
-                        <td className="py-2.5 text-right">{d.outbound_parcels.toLocaleString()}</td>
-                        <td className="py-2.5 text-right">{d.outbound_cbm.toFixed(4)}</td>
-                        <td className="py-2.5 text-right">{d.outbound_weight_kg.toFixed(1)}</td>
-                        <td className="py-2.5 text-right">{d.inbound_receivings.toLocaleString()}</td>
+                        <td className="py-2.5 text-right">{d.outbound_events.toLocaleString()}</td>
+                        <td className="py-2.5 text-right">{d.outbound_qty.toLocaleString()}</td>
+                        <td className="py-2.5 text-right">{d.outbound_skus}</td>
+                        <td className="py-2.5 text-right">{d.inbound_events.toLocaleString()}</td>
                         <td className="py-2.5 text-right">{d.inbound_qty.toLocaleString()}</td>
+                        <td className="py-2.5 text-right">{d.inbound_skus}</td>
                         <td className="py-2.5 text-right text-slate-500">
                           {totalOutbound > 0
-                            ? ((d.outbound_parcels / totalOutbound) * 100).toFixed(1) + "%"
+                            ? ((d.outbound_qty / totalOutbound) * 100).toFixed(1) + "%"
                             : "—"}
                         </td>
                       </tr>
@@ -117,12 +119,12 @@ export default function CustomersPage() {
                   <tfoot>
                     <tr className="border-t-2 border-slate-300 font-semibold">
                       <td className="py-2.5">Total</td>
-                      <td className="py-2.5 text-right">{data.reduce((s, d) => s + d.outbound_orders, 0).toLocaleString()}</td>
+                      <td className="py-2.5 text-right">{data.reduce((s, d) => s + d.outbound_events, 0).toLocaleString()}</td>
                       <td className="py-2.5 text-right">{totalOutbound.toLocaleString()}</td>
-                      <td className="py-2.5 text-right">{data.reduce((s, d) => s + d.outbound_cbm, 0).toFixed(4)}</td>
-                      <td className="py-2.5 text-right">{data.reduce((s, d) => s + d.outbound_weight_kg, 0).toFixed(1)}</td>
-                      <td className="py-2.5 text-right">{data.reduce((s, d) => s + d.inbound_receivings, 0).toLocaleString()}</td>
+                      <td className="py-2.5 text-right">—</td>
+                      <td className="py-2.5 text-right">{data.reduce((s, d) => s + d.inbound_events, 0).toLocaleString()}</td>
                       <td className="py-2.5 text-right">{totalInbound.toLocaleString()}</td>
+                      <td className="py-2.5 text-right">—</td>
                       <td className="py-2.5 text-right">100%</td>
                     </tr>
                   </tfoot>

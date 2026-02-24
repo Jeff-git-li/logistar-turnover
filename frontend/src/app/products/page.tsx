@@ -2,14 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
-import { ProductTable } from "@/components/ProductTable";
-import { getProductAnalysis, type ProductData } from "@/lib/api";
+import { DateRangePicker } from "@/components/DateRangePicker";
+import { WarehouseSelect } from "@/components/WarehouseSelect";
+import { getInvlogSkus, type InvlogSkuData } from "@/lib/api";
 
 export default function ProductsPage() {
-  const [sortBy, setSortBy] = useState("volume_cbm");
+  const [dateFrom, setDateFrom] = useState("2025-08-24");
+  const [dateTo, setDateTo] = useState("2025-09-24");
+  const [sortBy, setSortBy] = useState("outbound_qty");
   const [customerCode, setCustomerCode] = useState("");
-  const [limit, setLimit] = useState(50);
-  const [data, setData] = useState<ProductData[]>([]);
+  const [warehouseId, setWarehouseId] = useState("");
+  const [limit, setLimit] = useState(100);
+  const [data, setData] = useState<InvlogSkuData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -17,9 +21,12 @@ export default function ProductsPage() {
       setLoading(true);
       try {
         setData(
-          await getProductAnalysis({
+          await getInvlogSkus({
+            dateFrom,
+            dateTo,
             sortBy,
             customerCode: customerCode || undefined,
+            warehouseId: warehouseId || undefined,
             limit,
           })
         );
@@ -30,7 +37,7 @@ export default function ProductsPage() {
       }
     }
     load();
-  }, [sortBy, customerCode, limit]);
+  }, [dateFrom, dateTo, sortBy, customerCode, warehouseId, limit]);
 
   return (
     <div className="flex">
@@ -38,12 +45,12 @@ export default function ProductsPage() {
       <main className="flex-1 p-8">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Product / SKU Analysis</h1>
+            <h1 className="text-2xl font-bold text-slate-900">SKU Movement Analysis</h1>
             <p className="text-sm text-slate-500 mt-1">
-              Volume, weight, and value rankings
+              Per-SKU inbound/outbound movement from inventory logs
             </p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <input
               type="text"
               placeholder="Customer code..."
@@ -51,11 +58,11 @@ export default function ProductsPage() {
               onChange={(e) => setCustomerCode(e.target.value)}
               className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm w-40 focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
+            <WarehouseSelect value={warehouseId} onChange={setWarehouseId} />
             <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
               {[
-                { key: "volume_cbm", label: "Volume" },
-                { key: "weight", label: "Weight" },
-                { key: "value", label: "Value" },
+                { key: "outbound_qty", label: "Outbound" },
+                { key: "inbound_qty", label: "Inbound" },
               ].map((opt) => (
                 <button
                   key={opt.key}
@@ -75,11 +82,19 @@ export default function ProductsPage() {
               onChange={(e) => setLimit(Number(e.target.value))}
               className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             >
-              <option value={25}>Top 25</option>
               <option value={50}>Top 50</option>
               <option value={100}>Top 100</option>
               <option value={200}>Top 200</option>
+              <option value={500}>Top 500</option>
             </select>
+            <DateRangePicker
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onChange={(f, t) => {
+                setDateFrom(f);
+                setDateTo(t);
+              }}
+            />
           </div>
         </div>
 
@@ -90,10 +105,45 @@ export default function ProductsPage() {
         ) : (
           <div className="chart-container">
             <h3 className="text-lg font-semibold text-slate-900 mb-4">
-              Products by {sortBy === "volume_cbm" ? "Volume (CBM)" : sortBy === "weight" ? "Weight" : "Declared Value"}{" "}
-              <span className="text-sm font-normal text-slate-500">({data.length} results)</span>
+              SKUs by {sortBy === "outbound_qty" ? "Outbound" : "Inbound"} Qty{" "}
+              <span className="text-sm font-normal text-slate-500">
+                ({data.length} results)
+              </span>
             </h3>
-            <ProductTable data={data} />
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left">
+                    <th className="pb-3 font-semibold text-slate-600">#</th>
+                    <th className="pb-3 font-semibold text-slate-600">SKU (Barcode)</th>
+                    <th className="pb-3 font-semibold text-slate-600">Customer</th>
+                    <th className="pb-3 font-semibold text-slate-600 text-right">Outbound Qty</th>
+                    <th className="pb-3 font-semibold text-slate-600 text-right">Inbound Qty</th>
+                    <th className="pb-3 font-semibold text-slate-600 text-right">Net Change</th>
+                    <th className="pb-3 font-semibold text-slate-600 text-right">Events</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.map((d, i) => (
+                    <tr key={`${d.product_barcode}-${d.customer_code}`} className="border-b border-slate-100 hover:bg-slate-50">
+                      <td className="py-2.5 text-slate-400">{i + 1}</td>
+                      <td className="py-2.5 font-mono text-xs">{d.product_barcode}</td>
+                      <td className="py-2.5">
+                        <span className="inline-block bg-brand-100 text-brand-700 px-2 py-0.5 rounded text-xs font-medium">
+                          {d.customer_code}
+                        </span>
+                      </td>
+                      <td className="py-2.5 text-right">{d.outbound_qty.toLocaleString()}</td>
+                      <td className="py-2.5 text-right">{d.inbound_qty.toLocaleString()}</td>
+                      <td className={`py-2.5 text-right font-medium ${d.net_change > 0 ? "text-green-600" : d.net_change < 0 ? "text-red-600" : "text-slate-500"}`}>
+                        {d.net_change > 0 ? "+" : ""}{d.net_change.toLocaleString()}
+                      </td>
+                      <td className="py-2.5 text-right">{d.total_events.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </main>

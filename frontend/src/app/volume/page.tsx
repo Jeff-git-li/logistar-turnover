@@ -2,27 +2,30 @@
 
 import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
-import { VolumeChart } from "@/components/VolumeChart";
+import { InvlogVolumeChart } from "@/components/InvlogVolumeChart";
 import { DateRangePicker } from "@/components/DateRangePicker";
-import { getInboundOutbound, type InboundOutboundData } from "@/lib/api";
+import { WarehouseSelect } from "@/components/WarehouseSelect";
+import { getInvlogVolume, type InvlogVolumeData } from "@/lib/api";
 
 export default function VolumePage() {
-  const [dateFrom, setDateFrom] = useState("2024-01-01");
-  const [dateTo, setDateTo] = useState("2026-02-23");
-  const [granularity, setGranularity] = useState("month");
+  const [dateFrom, setDateFrom] = useState("2025-08-24");
+  const [dateTo, setDateTo] = useState("2025-09-24");
+  const [granularity, setGranularity] = useState("day");
   const [customerCode, setCustomerCode] = useState("");
-  const [data, setData] = useState<InboundOutboundData | null>(null);
+  const [warehouseId, setWarehouseId] = useState("");
+  const [data, setData] = useState<InvlogVolumeData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
       try {
-        const result = await getInboundOutbound({
+        const result = await getInvlogVolume({
           dateFrom,
           dateTo,
           granularity,
           customerCode: customerCode || undefined,
+          warehouseId: warehouseId || undefined,
         });
         setData(result);
       } catch (e) {
@@ -32,7 +35,7 @@ export default function VolumePage() {
       }
     }
     load();
-  }, [dateFrom, dateTo, granularity, customerCode]);
+  }, [dateFrom, dateTo, granularity, customerCode, warehouseId]);
 
   return (
     <div className="flex">
@@ -40,9 +43,11 @@ export default function VolumePage() {
       <main className="flex-1 p-8">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Inbound / Outbound Volume</h1>
+            <h1 className="text-2xl font-bold text-slate-900">
+              Inbound / Outbound Volume
+            </h1>
             <p className="text-sm text-slate-500 mt-1">
-              Track shipment volumes over time
+              Track inventory movement quantities over time
             </p>
           </div>
           <div className="flex items-center gap-4">
@@ -53,6 +58,7 @@ export default function VolumePage() {
               onChange={(e) => setCustomerCode(e.target.value)}
               className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm w-40 focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
+            <WarehouseSelect value={warehouseId} onChange={setWarehouseId} />
             <DateRangePicker
               dateFrom={dateFrom}
               dateTo={dateTo}
@@ -77,32 +83,32 @@ export default function VolumePage() {
               <h3 className="text-lg font-semibold text-slate-900 mb-4">
                 Volume Over Time
               </h3>
-              {data && <VolumeChart outbound={data.outbound} inbound={data.inbound} />}
+              {data && <InvlogVolumeChart data={data} />}
             </div>
 
             {/* Data tables */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="chart-container">
-                <h3 className="text-lg font-semibold text-slate-900 mb-4">Outbound Details</h3>
+                <h3 className="text-lg font-semibold text-slate-900 mb-4">
+                  Outbound Details
+                </h3>
                 <div className="overflow-x-auto max-h-80 overflow-y-auto">
                   <table className="w-full text-sm">
                     <thead className="sticky top-0 bg-white">
                       <tr className="border-b text-left">
                         <th className="pb-2 font-semibold text-slate-600">Period</th>
-                        <th className="pb-2 font-semibold text-slate-600 text-right">Orders</th>
-                        <th className="pb-2 font-semibold text-slate-600 text-right">Parcels</th>
-                        <th className="pb-2 font-semibold text-slate-600 text-right">CBM</th>
-                        <th className="pb-2 font-semibold text-slate-600 text-right">Weight (kg)</th>
+                        <th className="pb-2 font-semibold text-slate-600 text-right">Events</th>
+                        <th className="pb-2 font-semibold text-slate-600 text-right">Quantity</th>
+                        <th className="pb-2 font-semibold text-slate-600 text-right">Unique SKUs</th>
                       </tr>
                     </thead>
                     <tbody>
                       {data?.outbound.map((r) => (
                         <tr key={r.period} className="border-b border-slate-50 hover:bg-slate-50">
                           <td className="py-2">{r.period}</td>
-                          <td className="py-2 text-right">{r.order_count}</td>
-                          <td className="py-2 text-right">{r.parcel_count}</td>
-                          <td className="py-2 text-right">{r.total_cbm.toFixed(4)}</td>
-                          <td className="py-2 text-right">{r.total_weight_kg.toFixed(1)}</td>
+                          <td className="py-2 text-right">{r.event_count.toLocaleString()}</td>
+                          <td className="py-2 text-right">{r.total_qty.toLocaleString()}</td>
+                          <td className="py-2 text-right">{r.unique_skus}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -111,24 +117,26 @@ export default function VolumePage() {
               </div>
 
               <div className="chart-container">
-                <h3 className="text-lg font-semibold text-slate-900 mb-4">Inbound Details</h3>
+                <h3 className="text-lg font-semibold text-slate-900 mb-4">
+                  Inbound Details
+                </h3>
                 <div className="overflow-x-auto max-h-80 overflow-y-auto">
                   <table className="w-full text-sm">
                     <thead className="sticky top-0 bg-white">
                       <tr className="border-b text-left">
                         <th className="pb-2 font-semibold text-slate-600">Period</th>
-                        <th className="pb-2 font-semibold text-slate-600 text-right">Receivings</th>
-                        <th className="pb-2 font-semibold text-slate-600 text-right">Received Qty</th>
-                        <th className="pb-2 font-semibold text-slate-600 text-right">Shelved Qty</th>
+                        <th className="pb-2 font-semibold text-slate-600 text-right">Events</th>
+                        <th className="pb-2 font-semibold text-slate-600 text-right">Quantity</th>
+                        <th className="pb-2 font-semibold text-slate-600 text-right">Unique SKUs</th>
                       </tr>
                     </thead>
                     <tbody>
                       {data?.inbound.map((r) => (
                         <tr key={r.period} className="border-b border-slate-50 hover:bg-slate-50">
                           <td className="py-2">{r.period}</td>
-                          <td className="py-2 text-right">{r.receiving_count}</td>
-                          <td className="py-2 text-right">{r.total_received_qty}</td>
-                          <td className="py-2 text-right">{r.total_shelved_qty}</td>
+                          <td className="py-2 text-right">{r.event_count.toLocaleString()}</td>
+                          <td className="py-2 text-right">{r.total_qty.toLocaleString()}</td>
+                          <td className="py-2 text-right">{r.unique_skus}</td>
                         </tr>
                       ))}
                     </tbody>
