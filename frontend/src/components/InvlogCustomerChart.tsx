@@ -27,8 +27,8 @@ export function InvlogCustomerChart({ data }: InvlogCustomerChartProps) {
 
   const chartData = data.slice(0, 15).map((d) => ({
     customer: d.customer_code,
-    outbound: d.outbound_qty,
-    inbound: d.inbound_qty,
+    outbound: d.outbound_vol,
+    inbound: d.inbound_vol,
   }));
 
   return (
@@ -45,21 +45,21 @@ export function InvlogCustomerChart({ data }: InvlogCustomerChartProps) {
           textAnchor="end"
           height={80}
         />
-        <YAxis tick={{ fontSize: 12 }} />
+        <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${v.toLocaleString()}`} />
         <Tooltip
           contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0" }}
-          formatter={(value: number) => value.toLocaleString()}
+          formatter={(value: number) => `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} CBM`}
         />
         <Legend />
         <Bar
           dataKey="inbound"
-          name="Inbound Qty"
+          name="Inbound Vol (CBM)"
           fill="#3b82f6"
           radius={[4, 4, 0, 0]}
         />
         <Bar
           dataKey="outbound"
-          name="Outbound Qty"
+          name="Outbound Vol (CBM)"
           fill="#f97316"
           radius={[4, 4, 0, 0]}
         />

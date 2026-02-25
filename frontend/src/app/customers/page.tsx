@@ -8,8 +8,14 @@ import { WarehouseSelect } from "@/components/WarehouseSelect";
 import { getInvlogCustomers, type InvlogCustomerData } from "@/lib/api";
 
 export default function CustomersPage() {
-  const [dateFrom, setDateFrom] = useState("2025-08-24");
-  const [dateTo, setDateTo] = useState("2025-09-24");
+  const defaults = (() => {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - 30);
+    return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+  })();
+  const [dateFrom, setDateFrom] = useState(defaults.from);
+  const [dateTo, setDateTo] = useState(defaults.to);
   const [warehouseId, setWarehouseId] = useState("");
   const [data, setData] = useState<InvlogCustomerData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,8 +40,8 @@ export default function CustomersPage() {
     load();
   }, [dateFrom, dateTo, warehouseId]);
 
-  const totalOutbound = data.reduce((s, d) => s + d.outbound_qty, 0);
-  const totalInbound = data.reduce((s, d) => s + d.inbound_qty, 0);
+  const totalOutboundVol = data.reduce((s, d) => s + d.outbound_vol, 0);
+  const totalInboundVol = data.reduce((s, d) => s + d.inbound_vol, 0);
 
   return (
     <div className="flex">
@@ -85,13 +91,13 @@ export default function CustomersPage() {
                   <thead>
                     <tr className="border-b border-slate-200 text-left">
                       <th className="pb-3 font-semibold text-slate-600">Customer</th>
-                      <th className="pb-3 font-semibold text-slate-600 text-right">Out Events</th>
+                      <th className="pb-3 font-semibold text-slate-600 text-right">Out Vol (CBM)</th>
+                      <th className="pb-3 font-semibold text-slate-600 text-right">In Vol (CBM)</th>
                       <th className="pb-3 font-semibold text-slate-600 text-right">Out Qty</th>
                       <th className="pb-3 font-semibold text-slate-600 text-right">Out SKUs</th>
-                      <th className="pb-3 font-semibold text-slate-600 text-right">In Events</th>
                       <th className="pb-3 font-semibold text-slate-600 text-right">In Qty</th>
                       <th className="pb-3 font-semibold text-slate-600 text-right">In SKUs</th>
-                      <th className="pb-3 font-semibold text-slate-600 text-right">% of Out</th>
+                      <th className="pb-3 font-semibold text-slate-600 text-right">% of Out Vol</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -102,15 +108,15 @@ export default function CustomersPage() {
                             {d.customer_code}
                           </span>
                         </td>
-                        <td className="py-2.5 text-right">{d.outbound_events.toLocaleString()}</td>
-                        <td className="py-2.5 text-right">{d.outbound_qty.toLocaleString()}</td>
+                        <td className="py-2.5 text-right font-medium">{d.outbound_vol.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                        <td className="py-2.5 text-right font-medium">{d.inbound_vol.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                        <td className="py-2.5 text-right text-slate-500">{d.outbound_qty.toLocaleString()}</td>
                         <td className="py-2.5 text-right">{d.outbound_skus}</td>
-                        <td className="py-2.5 text-right">{d.inbound_events.toLocaleString()}</td>
-                        <td className="py-2.5 text-right">{d.inbound_qty.toLocaleString()}</td>
+                        <td className="py-2.5 text-right text-slate-500">{d.inbound_qty.toLocaleString()}</td>
                         <td className="py-2.5 text-right">{d.inbound_skus}</td>
                         <td className="py-2.5 text-right text-slate-500">
-                          {totalOutbound > 0
-                            ? ((d.outbound_qty / totalOutbound) * 100).toFixed(1) + "%"
+                          {totalOutboundVol > 0
+                            ? ((d.outbound_vol / totalOutboundVol) * 100).toFixed(1) + "%"
                             : "—"}
                         </td>
                       </tr>
@@ -119,11 +125,11 @@ export default function CustomersPage() {
                   <tfoot>
                     <tr className="border-t-2 border-slate-300 font-semibold">
                       <td className="py-2.5">Total</td>
-                      <td className="py-2.5 text-right">{data.reduce((s, d) => s + d.outbound_events, 0).toLocaleString()}</td>
-                      <td className="py-2.5 text-right">{totalOutbound.toLocaleString()}</td>
+                      <td className="py-2.5 text-right">{totalOutboundVol.toLocaleString(undefined, { maximumFractionDigits: 1 })}</td>
+                      <td className="py-2.5 text-right">{totalInboundVol.toLocaleString(undefined, { maximumFractionDigits: 1 })}</td>
+                      <td className="py-2.5 text-right text-slate-500">{data.reduce((s, d) => s + d.outbound_qty, 0).toLocaleString()}</td>
                       <td className="py-2.5 text-right">—</td>
-                      <td className="py-2.5 text-right">{data.reduce((s, d) => s + d.inbound_events, 0).toLocaleString()}</td>
-                      <td className="py-2.5 text-right">{totalInbound.toLocaleString()}</td>
+                      <td className="py-2.5 text-right text-slate-500">{data.reduce((s, d) => s + d.inbound_qty, 0).toLocaleString()}</td>
                       <td className="py-2.5 text-right">—</td>
                       <td className="py-2.5 text-right">100%</td>
                     </tr>

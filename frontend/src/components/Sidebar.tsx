@@ -49,7 +49,7 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="p-4 border-t border-slate-200">
-        <p className="text-xs text-slate-400">Ontario, CA &middot; New York, NY</p>
+        <p className="text-xs text-slate-400">Ontario &middot; New York &middot; Rialto</p>
       </div>
     </aside>
   );

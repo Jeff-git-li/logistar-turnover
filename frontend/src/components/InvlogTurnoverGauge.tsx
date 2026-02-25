@@ -51,21 +51,21 @@ export function InvlogTurnoverGauge({ data }: InvlogTurnoverGaugeProps) {
       {/* Details grid */}
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-blue-50 rounded-lg p-3">
-          <p className="text-xs text-blue-600 font-medium">Total Inbound</p>
+          <p className="text-xs text-blue-600 font-medium">Inbound Vol (CBM)</p>
           <p className="text-lg font-bold text-blue-900">
-            {data.total_inbound_qty.toLocaleString()}
+            {data.total_inbound_vol.toLocaleString(undefined, { maximumFractionDigits: 1 })}
           </p>
         </div>
         <div className="bg-orange-50 rounded-lg p-3">
-          <p className="text-xs text-orange-600 font-medium">Total Outbound</p>
+          <p className="text-xs text-orange-600 font-medium">Outbound Vol (CBM)</p>
           <p className="text-lg font-bold text-orange-900">
-            {data.total_outbound_qty.toLocaleString()}
+            {data.total_outbound_vol.toLocaleString(undefined, { maximumFractionDigits: 1 })}
           </p>
         </div>
         <div className="bg-slate-50 rounded-lg p-3">
-          <p className="text-xs text-slate-600 font-medium">Avg Inventory</p>
+          <p className="text-xs text-slate-600 font-medium">Avg Inventory (CBM)</p>
           <p className="text-lg font-bold text-slate-900">
-            {data.average_inventory.toLocaleString()}
+            {data.average_inventory_vol.toLocaleString(undefined, { maximumFractionDigits: 1 })}
           </p>
         </div>
         <div className="bg-green-50 rounded-lg p-3">
@@ -75,15 +75,15 @@ export function InvlogTurnoverGauge({ data }: InvlogTurnoverGaugeProps) {
           </p>
         </div>
         <div className="bg-purple-50 rounded-lg p-3">
-          <p className="text-xs text-purple-600 font-medium">Beginning Inv</p>
+          <p className="text-xs text-purple-600 font-medium">Beginning Inv (CBM)</p>
           <p className="text-lg font-bold text-purple-900">
-            {data.beginning_inventory.toLocaleString()}
+            {data.beginning_inventory_vol.toLocaleString(undefined, { maximumFractionDigits: 1 })}
           </p>
         </div>
         <div className="bg-pink-50 rounded-lg p-3">
-          <p className="text-xs text-pink-600 font-medium">Ending Inv</p>
+          <p className="text-xs text-pink-600 font-medium">Ending Inv (CBM)</p>
           <p className="text-lg font-bold text-pink-900">
-            {data.ending_inventory.toLocaleString()}
+            {data.ending_inventory_vol.toLocaleString(undefined, { maximumFractionDigits: 1 })}
           </p>
         </div>
       </div>

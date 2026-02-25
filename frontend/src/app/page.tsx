@@ -18,9 +18,20 @@ import {
   type InvlogCustomerData,
 } from "@/lib/api";
 
+function last30Days() {
+  const to = new Date();
+  const from = new Date();
+  from.setDate(from.getDate() - 30);
+  return {
+    from: from.toISOString().slice(0, 10),
+    to: to.toISOString().slice(0, 10),
+  };
+}
+
 export default function DashboardPage() {
-  const [dateFrom, setDateFrom] = useState("2025-08-24");
-  const [dateTo, setDateTo] = useState("2025-09-24");
+  const defaults = last30Days();
+  const [dateFrom, setDateFrom] = useState(defaults.from);
+  const [dateTo, setDateTo] = useState(defaults.to);
   const [granularity, setGranularity] = useState("day");
   const [warehouseId, setWarehouseId] = useState("");
 
@@ -99,15 +110,15 @@ export default function DashboardPage() {
             {summary && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
                 <StatCard
-                  title="Outbound Events"
-                  value={summary.outbound.total_events.toLocaleString()}
-                  subtitle={`${summary.outbound.total_qty.toLocaleString()} units`}
+                  title="Outbound Volume"
+                  value={`${summary.outbound.total_vol.toLocaleString(undefined, { maximumFractionDigits: 1 })} CBM`}
+                  subtitle={`${summary.outbound.total_events.toLocaleString()} events · ${summary.outbound.total_qty.toLocaleString()} units`}
                   icon={<span className="text-2xl">📤</span>}
                 />
                 <StatCard
-                  title="Inbound Events"
-                  value={summary.inbound.total_events.toLocaleString()}
-                  subtitle={`${summary.inbound.total_qty.toLocaleString()} units`}
+                  title="Inbound Volume"
+                  value={`${summary.inbound.total_vol.toLocaleString(undefined, { maximumFractionDigits: 1 })} CBM`}
+                  subtitle={`${summary.inbound.total_events.toLocaleString()} events · ${summary.inbound.total_qty.toLocaleString()} units`}
                   icon={<span className="text-2xl">📥</span>}
                 />
                 <StatCard
@@ -151,16 +162,16 @@ export default function DashboardPage() {
             {/* Top Customers Table */}
             <div className="chart-container">
               <h3 className="text-lg font-semibold text-slate-900 mb-4">
-                Top Customers by Outbound ({customers.length})
+                Top Customers by Outbound Volume ({customers.length})
               </h3>
               <div className="overflow-x-auto max-h-80 overflow-y-auto">
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 bg-white">
                     <tr className="border-b text-left">
                       <th className="pb-2 font-semibold text-slate-600">Customer</th>
-                      <th className="pb-2 font-semibold text-slate-600 text-right">Out Events</th>
+                      <th className="pb-2 font-semibold text-slate-600 text-right">Out Vol (CBM)</th>
+                      <th className="pb-2 font-semibold text-slate-600 text-right">In Vol (CBM)</th>
                       <th className="pb-2 font-semibold text-slate-600 text-right">Out Qty</th>
-                      <th className="pb-2 font-semibold text-slate-600 text-right">In Events</th>
                       <th className="pb-2 font-semibold text-slate-600 text-right">In Qty</th>
                       <th className="pb-2 font-semibold text-slate-600 text-right">SKUs</th>
                     </tr>
@@ -173,10 +184,10 @@ export default function DashboardPage() {
                             {c.customer_code}
                           </span>
                         </td>
-                        <td className="py-2 text-right">{c.outbound_events.toLocaleString()}</td>
-                        <td className="py-2 text-right">{c.outbound_qty.toLocaleString()}</td>
-                        <td className="py-2 text-right">{c.inbound_events.toLocaleString()}</td>
-                        <td className="py-2 text-right">{c.inbound_qty.toLocaleString()}</td>
+                        <td className="py-2 text-right font-medium">{c.outbound_vol.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                        <td className="py-2 text-right font-medium">{c.inbound_vol.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                        <td className="py-2 text-right text-slate-500">{c.outbound_qty.toLocaleString()}</td>
+                        <td className="py-2 text-right text-slate-500">{c.inbound_qty.toLocaleString()}</td>
                         <td className="py-2 text-right">{c.outbound_skus}</td>
                       </tr>
                     ))}

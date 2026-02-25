@@ -20,32 +20,26 @@ export function InvlogVolumeChart({ data }: InvlogVolumeChartProps) {
   // Merge inbound and outbound by period
   const periodMap = new Map<
     string,
-    { period: string; inbound_qty: number; outbound_qty: number; inbound_events: number; outbound_events: number }
+    { period: string; inbound_vol: number; outbound_vol: number }
   >();
 
   for (const row of data.inbound || []) {
     const existing = periodMap.get(row.period) || {
       period: row.period,
-      inbound_qty: 0,
-      outbound_qty: 0,
-      inbound_events: 0,
-      outbound_events: 0,
+      inbound_vol: 0,
+      outbound_vol: 0,
     };
-    existing.inbound_qty = row.total_qty;
-    existing.inbound_events = row.event_count;
+    existing.inbound_vol = row.total_volume_cbm;
     periodMap.set(row.period, existing);
   }
 
   for (const row of data.outbound || []) {
     const existing = periodMap.get(row.period) || {
       period: row.period,
-      inbound_qty: 0,
-      outbound_qty: 0,
-      inbound_events: 0,
-      outbound_events: 0,
+      inbound_vol: 0,
+      outbound_vol: 0,
     };
-    existing.outbound_qty = row.total_qty;
-    existing.outbound_events = row.event_count;
+    existing.outbound_vol = row.total_volume_cbm;
     periodMap.set(row.period, existing);
   }
 
@@ -66,24 +60,24 @@ export function InvlogVolumeChart({ data }: InvlogVolumeChartProps) {
       <BarChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
         <XAxis dataKey="period" tick={{ fontSize: 12 }} />
-        <YAxis tick={{ fontSize: 12 }} />
+        <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${v.toLocaleString()}`} />
         <Tooltip
           contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0" }}
           formatter={(value: number, name: string) => [
-            value.toLocaleString(),
+            `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} CBM`,
             name,
           ]}
         />
         <Legend />
         <Bar
-          dataKey="inbound_qty"
-          name="Inbound Qty"
+          dataKey="inbound_vol"
+          name="Inbound Volume (CBM)"
           fill="#3b82f6"
           radius={[4, 4, 0, 0]}
         />
         <Bar
-          dataKey="outbound_qty"
-          name="Outbound Qty"
+          dataKey="outbound_vol"
+          name="Outbound Volume (CBM)"
           fill="#f97316"
           radius={[4, 4, 0, 0]}
         />

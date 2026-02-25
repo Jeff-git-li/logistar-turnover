@@ -8,8 +8,14 @@ import { WarehouseSelect } from "@/components/WarehouseSelect";
 import { getInvlogVolume, type InvlogVolumeData } from "@/lib/api";
 
 export default function VolumePage() {
-  const [dateFrom, setDateFrom] = useState("2025-08-24");
-  const [dateTo, setDateTo] = useState("2025-09-24");
+  const defaults = (() => {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - 30);
+    return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+  })();
+  const [dateFrom, setDateFrom] = useState(defaults.from);
+  const [dateTo, setDateTo] = useState(defaults.to);
   const [granularity, setGranularity] = useState("day");
   const [customerCode, setCustomerCode] = useState("");
   const [warehouseId, setWarehouseId] = useState("");
@@ -47,7 +53,7 @@ export default function VolumePage() {
               Inbound / Outbound Volume
             </h1>
             <p className="text-sm text-slate-500 mt-1">
-              Track inventory movement quantities over time
+              Track inventory movement volume (CBM) over time
             </p>
           </div>
           <div className="flex items-center gap-4">
@@ -97,17 +103,19 @@ export default function VolumePage() {
                     <thead className="sticky top-0 bg-white">
                       <tr className="border-b text-left">
                         <th className="pb-2 font-semibold text-slate-600">Period</th>
-                        <th className="pb-2 font-semibold text-slate-600 text-right">Events</th>
+                        <th className="pb-2 font-semibold text-slate-600 text-right">Volume (CBM)</th>
                         <th className="pb-2 font-semibold text-slate-600 text-right">Quantity</th>
-                        <th className="pb-2 font-semibold text-slate-600 text-right">Unique SKUs</th>
+                        <th className="pb-2 font-semibold text-slate-600 text-right">Events</th>
+                        <th className="pb-2 font-semibold text-slate-600 text-right">SKUs</th>
                       </tr>
                     </thead>
                     <tbody>
                       {data?.outbound.map((r) => (
                         <tr key={r.period} className="border-b border-slate-50 hover:bg-slate-50">
                           <td className="py-2">{r.period}</td>
-                          <td className="py-2 text-right">{r.event_count.toLocaleString()}</td>
+                          <td className="py-2 text-right font-medium">{r.total_volume_cbm.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
                           <td className="py-2 text-right">{r.total_qty.toLocaleString()}</td>
+                          <td className="py-2 text-right text-slate-500">{r.event_count.toLocaleString()}</td>
                           <td className="py-2 text-right">{r.unique_skus}</td>
                         </tr>
                       ))}
@@ -125,17 +133,19 @@ export default function VolumePage() {
                     <thead className="sticky top-0 bg-white">
                       <tr className="border-b text-left">
                         <th className="pb-2 font-semibold text-slate-600">Period</th>
-                        <th className="pb-2 font-semibold text-slate-600 text-right">Events</th>
+                        <th className="pb-2 font-semibold text-slate-600 text-right">Volume (CBM)</th>
                         <th className="pb-2 font-semibold text-slate-600 text-right">Quantity</th>
-                        <th className="pb-2 font-semibold text-slate-600 text-right">Unique SKUs</th>
+                        <th className="pb-2 font-semibold text-slate-600 text-right">Events</th>
+                        <th className="pb-2 font-semibold text-slate-600 text-right">SKUs</th>
                       </tr>
                     </thead>
                     <tbody>
                       {data?.inbound.map((r) => (
                         <tr key={r.period} className="border-b border-slate-50 hover:bg-slate-50">
                           <td className="py-2">{r.period}</td>
-                          <td className="py-2 text-right">{r.event_count.toLocaleString()}</td>
+                          <td className="py-2 text-right font-medium">{r.total_volume_cbm.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
                           <td className="py-2 text-right">{r.total_qty.toLocaleString()}</td>
+                          <td className="py-2 text-right text-slate-500">{r.event_count.toLocaleString()}</td>
                           <td className="py-2 text-right">{r.unique_skus}</td>
                         </tr>
                       ))}

@@ -19,8 +19,8 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
 // ─── Inventory-Log Types ─────────────────────────────────────────────────────
 
 export interface InvlogDashboardSummary {
-  outbound: { total_events: number; total_qty: number; unique_skus: number };
-  inbound: { total_events: number; total_qty: number; unique_skus: number };
+  outbound: { total_events: number; total_qty: number; total_vol: number; unique_skus: number };
+  inbound: { total_events: number; total_qty: number; total_vol: number; unique_skus: number };
   unique_customers: number;
   active_skus: number;
   total_products: number;
@@ -28,16 +28,18 @@ export interface InvlogDashboardSummary {
 }
 
 export interface InvlogVolumeData {
-  inbound: Array<{ period: string; event_count: number; total_qty: number; unique_skus: number }>;
-  outbound: Array<{ period: string; event_count: number; total_qty: number; unique_skus: number }>;
+  inbound: Array<{ period: string; event_count: number; total_qty: number; total_volume_cbm: number; unique_skus: number }>;
+  outbound: Array<{ period: string; event_count: number; total_qty: number; total_volume_cbm: number; unique_skus: number }>;
 }
 
 export interface InvlogTurnoverData {
   total_inbound_qty: number;
   total_outbound_qty: number;
-  beginning_inventory: number;
-  ending_inventory: number;
-  average_inventory: number;
+  total_inbound_vol: number;
+  total_outbound_vol: number;
+  beginning_inventory_vol: number;
+  ending_inventory_vol: number;
+  average_inventory_vol: number;
   turnover_rate: number;
   days_in_period: number | null;
 }
@@ -46,9 +48,11 @@ export interface InvlogCustomerData {
   customer_code: string;
   inbound_events: number;
   inbound_qty: number;
+  inbound_vol: number;
   inbound_skus: number;
   outbound_events: number;
   outbound_qty: number;
+  outbound_vol: number;
   outbound_skus: number;
 }
 
@@ -57,8 +61,11 @@ export interface InvlogSkuData {
   customer_code: string;
   inbound_qty: number;
   outbound_qty: number;
+  inbound_vol: number;
+  outbound_vol: number;
+  net_change_vol: number;
   total_events: number;
-  net_change: number;
+  unit_cbm: number;
 }
 
 export interface InvlogWarehouseData {
@@ -67,10 +74,19 @@ export interface InvlogWarehouseData {
   timezone: string;
   inbound_events: number;
   inbound_qty: number;
+  inbound_vol: number;
   outbound_events: number;
   outbound_qty: number;
+  outbound_vol: number;
   unique_skus: number;
   unique_customers: number;
+  total_capacity_cbm: number;
+}
+
+export interface WarehouseCapacity {
+  warehouse_id: string;
+  warehouse_name: string;
+  total_capacity_cbm: number;
 }
 
 export interface SyncLogEntry {
@@ -98,6 +114,8 @@ function qs(params: Record<string, string | number | undefined | null>): string 
 export const WAREHOUSES = [
   { id: "13", name: "Ontario, CA" },
   { id: "5", name: "New York, NY" },
+  { id: "3", name: "Rialto, CA (WH3)" },
+  { id: "15", name: "Rialto, CA (WH15)" },
 ] as const;
 
 // ─── Inventory-Log API Functions (primary) ───────────────────────────────────
@@ -227,4 +245,23 @@ export async function triggerDailySync(): Promise<{ status: string; message: str
 
 export async function getSyncLogs(limit = 20): Promise<SyncLogEntry[]> {
   return fetchJSON(`/sync/logs?limit=${limit}`);
+}
+
+// ─── Warehouse Capacity ──────────────────────────────────────────────────────
+
+export async function getWarehouseCapacities(): Promise<WarehouseCapacity[]> {
+  return fetchJSON("/warehouses/capacities");
+}
+
+export async function setWarehouseCapacity(params: {
+  warehouseId: string;
+  totalCapacityCbm: number;
+}): Promise<WarehouseCapacity> {
+  return fetchJSON("/warehouses/capacities", {
+    method: "PUT",
+    body: JSON.stringify({
+      warehouse_id: params.warehouseId,
+      total_capacity_cbm: params.totalCapacityCbm,
+    }),
+  });
 }

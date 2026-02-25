@@ -7,9 +7,15 @@ import { WarehouseSelect } from "@/components/WarehouseSelect";
 import { getInvlogSkus, type InvlogSkuData } from "@/lib/api";
 
 export default function ProductsPage() {
-  const [dateFrom, setDateFrom] = useState("2025-08-24");
-  const [dateTo, setDateTo] = useState("2025-09-24");
-  const [sortBy, setSortBy] = useState("outbound_qty");
+  const defaults = (() => {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - 30);
+    return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+  })();
+  const [dateFrom, setDateFrom] = useState(defaults.from);
+  const [dateTo, setDateTo] = useState(defaults.to);
+  const [sortBy, setSortBy] = useState("outbound_vol");
   const [customerCode, setCustomerCode] = useState("");
   const [warehouseId, setWarehouseId] = useState("");
   const [limit, setLimit] = useState(100);
@@ -61,8 +67,10 @@ export default function ProductsPage() {
             <WarehouseSelect value={warehouseId} onChange={setWarehouseId} />
             <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
               {[
-                { key: "outbound_qty", label: "Outbound" },
-                { key: "inbound_qty", label: "Inbound" },
+                { key: "outbound_vol", label: "Out Vol" },
+                { key: "inbound_vol", label: "In Vol" },
+                { key: "outbound_qty", label: "Out Qty" },
+                { key: "inbound_qty", label: "In Qty" },
               ].map((opt) => (
                 <button
                   key={opt.key}
@@ -105,7 +113,7 @@ export default function ProductsPage() {
         ) : (
           <div className="chart-container">
             <h3 className="text-lg font-semibold text-slate-900 mb-4">
-              SKUs by {sortBy === "outbound_qty" ? "Outbound" : "Inbound"} Qty{" "}
+              SKUs by {sortBy.includes("vol") ? "Volume (CBM)" : "Quantity"}{" "}
               <span className="text-sm font-normal text-slate-500">
                 ({data.length} results)
               </span>
@@ -117,9 +125,12 @@ export default function ProductsPage() {
                     <th className="pb-3 font-semibold text-slate-600">#</th>
                     <th className="pb-3 font-semibold text-slate-600">SKU (Barcode)</th>
                     <th className="pb-3 font-semibold text-slate-600">Customer</th>
-                    <th className="pb-3 font-semibold text-slate-600 text-right">Outbound Qty</th>
-                    <th className="pb-3 font-semibold text-slate-600 text-right">Inbound Qty</th>
-                    <th className="pb-3 font-semibold text-slate-600 text-right">Net Change</th>
+                    <th className="pb-3 font-semibold text-slate-600 text-right">Unit CBM</th>
+                    <th className="pb-3 font-semibold text-slate-600 text-right">Out Vol (CBM)</th>
+                    <th className="pb-3 font-semibold text-slate-600 text-right">In Vol (CBM)</th>
+                    <th className="pb-3 font-semibold text-slate-600 text-right">Net Vol (CBM)</th>
+                    <th className="pb-3 font-semibold text-slate-600 text-right">Out Qty</th>
+                    <th className="pb-3 font-semibold text-slate-600 text-right">In Qty</th>
                     <th className="pb-3 font-semibold text-slate-600 text-right">Events</th>
                   </tr>
                 </thead>
@@ -133,12 +144,15 @@ export default function ProductsPage() {
                           {d.customer_code}
                         </span>
                       </td>
-                      <td className="py-2.5 text-right">{d.outbound_qty.toLocaleString()}</td>
-                      <td className="py-2.5 text-right">{d.inbound_qty.toLocaleString()}</td>
-                      <td className={`py-2.5 text-right font-medium ${d.net_change > 0 ? "text-green-600" : d.net_change < 0 ? "text-red-600" : "text-slate-500"}`}>
-                        {d.net_change > 0 ? "+" : ""}{d.net_change.toLocaleString()}
+                      <td className="py-2.5 text-right text-slate-500">{d.unit_cbm?.toFixed(6) ?? "—"}</td>
+                      <td className="py-2.5 text-right font-medium">{d.outbound_vol.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                      <td className="py-2.5 text-right font-medium">{d.inbound_vol.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                      <td className={`py-2.5 text-right font-medium ${d.net_change_vol > 0 ? "text-green-600" : d.net_change_vol < 0 ? "text-red-600" : "text-slate-500"}`}>
+                        {d.net_change_vol > 0 ? "+" : ""}{d.net_change_vol.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                       </td>
-                      <td className="py-2.5 text-right">{d.total_events.toLocaleString()}</td>
+                      <td className="py-2.5 text-right text-slate-500">{d.outbound_qty.toLocaleString()}</td>
+                      <td className="py-2.5 text-right text-slate-500">{d.inbound_qty.toLocaleString()}</td>
+                      <td className="py-2.5 text-right text-slate-500">{d.total_events.toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>
