@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     WAREHOUSE_MAP: dict = {
         "13": {"name": "Ontario, CA", "timezone": "America/Los_Angeles"},
         "5": {"name": "New York, NY", "timezone": "America/New_York"},
+        "3": {"name": "Rialto, CA", "timezone": "America/Los_Angeles"},
+        "15": {"name": "Rialto, CA", "timezone": "America/Los_Angeles"},
     }
     DEFAULT_WAREHOUSE_ID: int = 13
 

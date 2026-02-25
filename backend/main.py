@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 
 from config import settings
 from database import init_db, async_session_factory
-from routers import analytics, sync
+from routers import analytics, sync, warehouse
 
 logging.basicConfig(
     level=logging.INFO,
@@ -84,6 +84,7 @@ app.add_middleware(
 # Include routers
 app.include_router(analytics.router)
 app.include_router(sync.router)
+app.include_router(warehouse.router)
 
 
 @app.get("/api/health")

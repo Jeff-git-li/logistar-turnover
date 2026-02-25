@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func as sa_func
 from sqlalchemy.dialects.sqlite import insert as sqlite_upsert
 
-from models import Product, InventoryLog, SyncLog
+from models import Product, InventoryLog, SyncLog, InvlogDailySummary
 from services.wms_client import wms_client
 from config import settings
 
@@ -198,6 +198,10 @@ class SyncService:
             log.finished_at = datetime.now()
             await db.commit()
             logger.info(f"Synced {count} inventory logs")
+
+            # Rebuild daily summary table for fast analytics
+            await self.rebuild_daily_summary(db)
+
             return count
 
         except Exception as e:
@@ -207,6 +211,52 @@ class SyncService:
             await db.commit()
             logger.error(f"InventoryLog sync failed: {e}")
             raise
+
+    async def rebuild_daily_summary(self, db: AsyncSession):
+        """
+        Rebuild the invlog_daily_summary table from raw inventory_logs + products.
+        Uses raw SQL for the aggregation INSERT ... SELECT for speed.
+        """
+        from sqlalchemy import text as sa_text
+        logger.info("Rebuilding daily summary table...")
+        t0 = datetime.now()
+
+        # Clear existing
+        await db.execute(sa_text("DELETE FROM invlog_daily_summary"))
+        await db.commit()
+
+        # Rebuild via INSERT ... SELECT (same logic as build_daily_summary.py)
+        await db.execute(sa_text("""
+            INSERT INTO invlog_daily_summary
+                (summary_date, warehouse_id, direction, customer_code,
+                 event_count, total_qty, total_volume_cbm, unique_skus)
+            SELECT
+                DATE(il.warehouse_operation_time) AS summary_date,
+                il.warehouse_id,
+                il.direction,
+                COALESCE(il.customer_code, 'UNKNOWN') AS customer_code,
+                COUNT(il.id) AS event_count,
+                SUM(il.quantity) AS total_qty,
+                SUM(il.quantity * COALESCE(p.volume_cbm, 0)) AS total_volume_cbm,
+                COUNT(DISTINCT il.product_barcode) AS unique_skus
+            FROM inventory_logs il
+            LEFT JOIN products p ON il.product_barcode = p.product_barcode
+            WHERE il.direction IN ('inbound', 'outbound')
+              AND il.warehouse_operation_time IS NOT NULL
+            GROUP BY
+                DATE(il.warehouse_operation_time),
+                il.warehouse_id,
+                il.direction,
+                COALESCE(il.customer_code, 'UNKNOWN')
+        """))
+        await db.commit()
+
+        # Clear analytics cache so new data is reflected
+        from services.analytics import _cache
+        _cache.clear()
+
+        elapsed = (datetime.now() - t0).total_seconds()
+        logger.info(f"Daily summary rebuilt in {elapsed:.1f}s")
 
     async def daily_sync(self, db: AsyncSession) -> dict:
         """

@@ -26,6 +26,16 @@ class Product(Base):
     synced_at = Column(DateTime, server_default=func.now())
 
 
+class WarehouseCapacity(Base):
+    """User-configured total warehouse capacity (CBM) for utilization tracking."""
+    __tablename__ = "warehouse_capacities"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    warehouse_id = Column(String(20), unique=True, nullable=False, index=True)
+    total_capacity_cbm = Column(Float, nullable=False, default=0)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
 class SyncLog(Base):
     """Track data sync operations."""
     __tablename__ = "sync_logs"
@@ -68,14 +78,40 @@ class InventoryLog(Base):
     # Derived classification
     direction = Column(String(10), index=True)               # 'inbound', 'outbound', 'other'
 
+    # Composite indexes for analytics query performance
+    __table_args__ = (
+        Index("ix_invlog_dir_optime", "direction", "warehouse_operation_time"),
+        Index("ix_invlog_dir_wh_optime", "direction", "warehouse_id", "warehouse_operation_time"),
+        Index("ix_invlog_wh_dir_optime", "warehouse_id", "direction", "warehouse_operation_time"),
+        Index("ix_invlog_dir_cust_optime", "direction", "customer_code", "warehouse_operation_time"),
+        Index("ix_invlog_barcode_dir", "product_barcode", "direction"),
+    )
+
+
+class InvlogDailySummary(Base):
+    """
+    Pre-aggregated daily summary of inventory movements per warehouse/direction/customer.
+    Reduces 6M+ raw inventory_logs to ~3-5K summary rows for fast analytics.
+    """
+    __tablename__ = "invlog_daily_summary"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    summary_date = Column(Date, nullable=False)          # date of activity
+    warehouse_id = Column(String(20), nullable=False)
+    direction = Column(String(10), nullable=False)       # 'inbound', 'outbound'
+    customer_code = Column(String(50), nullable=False)
+    event_count = Column(Integer, default=0)
+    total_qty = Column(Integer, default=0)
+    total_volume_cbm = Column(Float, default=0)          # SUM(qty * product.volume_cbm)
+    unique_skus = Column(Integer, default=0)
+
     # Metadata
     synced_at = Column(DateTime, server_default=func.now())
 
     __table_args__ = (
-        Index("ix_invlog_barcode_time", "product_barcode", "warehouse_operation_time"),
-        Index("ix_invlog_customer_time", "customer_code", "warehouse_operation_time"),
-        Index("ix_invlog_warehouse_time", "warehouse_id", "warehouse_operation_time"),
-        Index("ix_invlog_direction_time", "direction", "warehouse_operation_time"),
-        # Uniqueness: same ref_no + product_barcode + ibl_add_time = same event
-        Index("uq_invlog_event", "ref_no", "product_barcode", "ibl_add_time", unique=True),
+        Index("ix_daily_date_dir", "summary_date", "direction"),
+        Index("ix_daily_wh_dir_date", "warehouse_id", "direction", "summary_date"),
+        Index("ix_daily_dir_date", "direction", "summary_date"),
+        Index("ix_daily_cust_dir_date", "customer_code", "direction", "summary_date"),
+        {"extend_existing": True},
     )
