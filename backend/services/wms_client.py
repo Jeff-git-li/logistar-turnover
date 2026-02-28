@@ -176,6 +176,37 @@ class WMSClient:
         logger.info(f"InventoryLog total fetched: {len(all_data)} records")
         return all_data
 
+    # -------------------------------------------------------------------------
+    # Product Inventory (live current stock per SKU per warehouse)
+    # -------------------------------------------------------------------------
+    async def get_product_inventory(
+        self,
+        page: int = 1,
+        page_size: int = DEFAULT_PAGE_SIZE,
+    ) -> dict:
+        """Fetch current product inventory (available + hold counts, dimensions)."""
+        payload = {
+            "service": "getProductInventory",
+            "page": page,
+            "pageSize": page_size,
+        }
+        return await self._request(payload)
+
+    async def get_all_product_inventory(self, page_size: int = DEFAULT_PAGE_SIZE) -> list[dict]:
+        """Fetch ALL product inventory records with pagination."""
+        all_data = []
+        page = 1
+        while True:
+            result = await self.get_product_inventory(page=page, page_size=page_size)
+            data = result.get("data", [])
+            all_data.extend(data)
+            total = int(result.get("totalCount", 0))
+            logger.info(f"ProductInventory: fetched page {page}, got {len(data)}, total={total}")
+            if len(all_data) >= total or not data:
+                break
+            page += 1
+        return all_data
+
 
 # Singleton
 wms_client = WMSClient()
