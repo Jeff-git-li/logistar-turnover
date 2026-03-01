@@ -45,8 +45,8 @@ async def _daily_sync_loop():
         logger.info("Daily auto-sync triggered")
         try:
             async with async_session_factory() as db:
-                svc = SyncService(db)
-                await svc.daily_sync()
+                svc = SyncService()
+                await svc.daily_sync(db)
             logger.info("Daily auto-sync completed successfully")
         except Exception:
             logger.exception("Daily auto-sync FAILED")

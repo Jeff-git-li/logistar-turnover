@@ -174,7 +174,6 @@ class SyncService:
                         inventory_status=_safe_int(raw.get("inventory_status")),
                         user_name=raw.get("user_name"),
                         direction=direction,
-                        synced_at=datetime.now(),
                     )
 
                     stmt = sqlite_upsert(InventoryLog).values(**values)
